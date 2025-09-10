@@ -6,6 +6,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import java.util.*
 
 // Структура данных игрока
 data class Player(
@@ -29,12 +30,24 @@ class MainActivity : AppCompatActivity() {
         // Находим элементы формы
         val editName = findViewById<EditText>(R.id.editTextName)
         val radioGroup = findViewById<RadioGroup>(R.id.radioGroupGender)
+        val radioMale = findViewById<RadioButton>(R.id.radioMale)
         val spinnerCourse = findViewById<Spinner>(R.id.spinnerCourse)
         val seekBar = findViewById<SeekBar>(R.id.seekBarLevel)
         val calendar = findViewById<CalendarView>(R.id.calendarView)
         val imageZodiac = findViewById<ImageView>(R.id.imageZodiac)
         val button = findViewById<Button>(R.id.buttonRegister)
         val textResult = findViewById<TextView>(R.id.textResult)
+
+        // Выбор Мужской по умолчанию
+        radioMale.isChecked = true
+
+        // Устанавливаем текущую дату по умолчанию
+        val today = Calendar.getInstance()
+        val day = today.get(Calendar.DAY_OF_MONTH)
+        val month = today.get(Calendar.MONTH) + 1 // месяцы начинаются с 0
+        val year = today.get(Calendar.YEAR)
+        birthDate = "$day.$month.$year"
+        calendar.date = today.timeInMillis // визуально выделяем текущую дату
 
         // Устанавливаем отступы для Edge-to-Edge
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -52,14 +65,16 @@ class MainActivity : AppCompatActivity() {
         // Следим за изменением даты рождения
         calendar.setOnDateChangeListener { _, year, month, day ->
             birthDate = "$day.${month + 1}.$year"
-            // здесь больше не обновляем картинку
-            // textResult можно пока просто показать выбранную дату
-//            textResult.text = "Дата рождения: $birthDate"
         }
 
-// Кнопка "Регистрация"
+        // Кнопка "Регистрация"
         button.setOnClickListener {
             val name = editName.text.toString()
+
+            if (name.isEmpty()) {
+                Toast.makeText(this, "Пожалуйста, введите ФИО", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
             val genderId = radioGroup.checkedRadioButtonId
             val gender = if (genderId != -1) {
@@ -74,7 +89,7 @@ class MainActivity : AppCompatActivity() {
 
             val player = Player(name, gender, course, level, birthDate, zodiac)
 
-            // 🔹 Обновляем картинку здесь
+            //Обновляем картинку здесь
             updateZodiacImage(zodiac, imageZodiac)
 
             textResult.text = """
@@ -116,7 +131,7 @@ class MainActivity : AppCompatActivity() {
         return getZodiac(day, month)
     }
 
-    // 👇 Функция для смены картинки
+    // Функция для смены картинки
     private fun updateZodiacImage(zodiac: String, imageView: ImageView) {
         when (zodiac) {
             "Овен" -> imageView.setImageResource(R.drawable.aries)
