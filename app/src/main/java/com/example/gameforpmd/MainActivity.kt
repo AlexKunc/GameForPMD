@@ -18,8 +18,8 @@ class MainActivity : AppCompatActivity() {
         val fragments = listOf(
             RegisterFragment(),
             RulesFragment(),
-//            AuthorsFragment(),
-//            SettingsFragment()
+            AuthorsFragment(),
+            SettingsFragment()
         )
 
         val titles = listOf("Регистрация", "Правила", "Авторы", "Настройки")

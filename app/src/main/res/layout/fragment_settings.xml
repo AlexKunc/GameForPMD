@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:dividerHeight="12dp">
+
+        <!-- Скорость игры -->
+        <TextView
+            android:id="@+id/textSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Скорость игры: 1" />
+
+        <SeekBar
+            android:id="@+id/seekBarSpeed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="10" />
+
+        <!-- Максимум тараканов -->
+        <TextView
+            android:id="@+id/textMaxCockroaches"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Максимум тараканов: 5" />
+
+        <SeekBar
+            android:id="@+id/seekBarMaxCockroaches"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="20" />
+
+        <!-- Интервал бонусов -->
+        <TextView
+            android:id="@+id/textBonusInterval"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Интервал бонусов (сек): 10" />
+
+        <SeekBar
+            android:id="@+id/seekBarBonusInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="60" />
+
+        <!-- Длительность раунда -->
+        <TextView
+            android:id="@+id/textRoundDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Длительность раунда (сек): 30" />
+
+        <SeekBar
+            android:id="@+id/seekBarRoundDuration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="300" />
+
+    </LinearLayout>
+</ScrollView>
