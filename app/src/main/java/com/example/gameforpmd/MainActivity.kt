@@ -16,13 +16,14 @@ class MainActivity : AppCompatActivity() {
         val viewPager = findViewById<ViewPager2>(R.id.viewPager)
 
         val fragments = listOf(
+            GameFragment(),
             RegisterFragment(),
             RulesFragment(),
             AuthorsFragment(),
             SettingsFragment()
         )
 
-        val titles = listOf("Регистрация", "Правила", "Авторы", "Настройки")
+        val titles = listOf("Игра","Регистрация", "Правила", "Авторы", "Настройки")
 
         viewPager.adapter = ViewPagerAdapter(this, fragments)
 
