@@ -89,31 +89,40 @@ class GameFragment : Fragment() {
 
     // -------------------- Сохранение результата --------------------
     private fun saveResult(points: Int) {
-        val prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val userId = prefs.getInt("current_user_id", -1)
+        val prefsUser = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val userId = prefsUser.getInt("current_user_id", -1)
         if (userId == -1) {
             Log.d("GameFragment", "Игрок не выбран, результат не сохранён")
             return
         }
 
+        // Берём актуальные настройки
+        val prefsGame = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
+        val difficultyNow = prefsGame.getInt("difficulty", 3).coerceIn(1, 10)
+        val maxBugsNow = prefsGame.getInt("maxCockroaches", 5).coerceAtLeast(1)
+        val bonusIntervalNow = prefsGame.getInt("bonusInterval", 15).coerceAtLeast(5)
+        val roundDurationNow = prefsGame.getInt("roundDuration", 30).coerceAtLeast(10)
+
         lifecycleScope.launch {
             val scoreEntity = Score(
                 userId = userId,
                 points = points,
-                difficulty = difficulty,
-                roundDuration = (roundMs / 1000).toInt(),
-                maxBugs = maxBugs,
-                bonusInterval = bonusIntervalSec
+                difficulty = difficultyNow,
+                roundDuration = roundDurationNow,
+                maxBugs = maxBugsNow,
+                bonusInterval = bonusIntervalNow
             )
 
             MyApp.db.scoreDao().insert(scoreEntity)
 
             Log.d(
                 "GameFragment",
-                "Результат сохранён: $points очков (userId=$userId, сложность=$difficulty, раунд=${roundMs/1000}с, жуки=$maxBugs, бонус=${bonusIntervalSec}с)"
+                "Результат сохранён: $points очков (userId=$userId, сложность=$difficultyNow, " +
+                        "раунд=${roundDurationNow}с, жуки=$maxBugsNow, бонус=${bonusIntervalNow}с)"
             )
         }
     }
+
 
 
     // -------------------- Таймер --------------------
