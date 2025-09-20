@@ -2,6 +2,10 @@ package com.example.gameforpmd
 
 import android.content.Context
 import android.graphics.PointF
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.util.Log
@@ -28,20 +32,22 @@ import android.animation.ObjectAnimator
 import android.animation.TimeInterpolator
 import android.view.animation.AccelerateDecelerateInterpolator
 
-class GameFragment : Fragment() {
+class GameFragment : Fragment(), SensorEventListener {
 
     private lateinit var gameField: FrameLayout
     private lateinit var textTimer: TextView
     private lateinit var textScore: TextView
     private lateinit var btnStart: Button
     private lateinit var btnPause: Button
+
+    private val bugAnimators = mutableListOf<ObjectAnimator>()
     private lateinit var btnStop: Button
 
     private var score = 0
     private var roundMs = 30_000L
     private var bonusIntervalSec = 15
     private var maxBugs = 5
-    private var difficulty = 3   // теперь вместо speed
+    private var difficulty = 3
 
     private var isRunning = false
     private var isPaused = false
@@ -51,6 +57,10 @@ class GameFragment : Fragment() {
     private var bonusJob: Job? = null
 
     private var remainingMs = 0L
+
+    // --- tilt ---
+    private var sensorManager: SensorManager? = null
+    private var tiltModeActive = false
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -64,7 +74,8 @@ class GameFragment : Fragment() {
         btnPause = view.findViewById(R.id.btnPause)
         btnStop = view.findViewById(R.id.btnStop)
 
-        // Подхватываем настройки
+        sensorManager = requireContext().getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
         val p = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
         difficulty = p.getInt("difficulty", 3).coerceIn(1, 10)
         maxBugs = p.getInt("maxCockroaches", 5).coerceAtLeast(1)
@@ -96,7 +107,6 @@ class GameFragment : Fragment() {
             return
         }
 
-        // Берём актуальные настройки
         val prefsGame = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
         val difficultyNow = prefsGame.getInt("difficulty", 3).coerceIn(1, 10)
         val maxBugsNow = prefsGame.getInt("maxCockroaches", 5).coerceAtLeast(1)
@@ -112,18 +122,10 @@ class GameFragment : Fragment() {
                 maxBugs = maxBugsNow,
                 bonusInterval = bonusIntervalNow
             )
-
             MyApp.db.scoreDao().insert(scoreEntity)
-
-            Log.d(
-                "GameFragment",
-                "Результат сохранён: $points очков (userId=$userId, сложность=$difficultyNow, " +
-                        "раунд=${roundDurationNow}с, жуки=$maxBugsNow, бонус=${bonusIntervalNow}с)"
-            )
+            Log.d("GameFragment", "Результат сохранён: $points очков (userId=$userId)")
         }
     }
-
-
 
     // -------------------- Таймер --------------------
     private fun startTimer(totalMs: Long) {
@@ -154,8 +156,6 @@ class GameFragment : Fragment() {
         spawnerJob?.cancel()
         bonusJob?.cancel()
         Toast.makeText(requireContext(), "Раунд окончен! Счёт: $score", Toast.LENGTH_LONG).show()
-
-        // сохраняем результат в базу
         saveResult(score)
     }
 
@@ -219,11 +219,7 @@ class GameFragment : Fragment() {
 
     private fun addBug() {
         val iv = ImageView(requireContext()).apply {
-            val bugVariants = listOf(
-                R.drawable.bug,
-                R.drawable.bug2,
-                R.drawable.bug3
-            )
+            val bugVariants = listOf(R.drawable.bug, R.drawable.bug2, R.drawable.bug3)
             setImageResource(bugVariants.random())
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -237,8 +233,26 @@ class GameFragment : Fragment() {
                 }
             }
         }
-
         gameField.addView(iv)
+
+        if (tiltModeActive) {
+            // если tilt включён → ставим жука на случайное место, без анимации
+            gameField.post {
+                val w = gameField.width
+                val h = gameField.height
+                val margin = 50
+                iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
+                iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
+            }
+        } else {
+            // обычное движение по траектории
+            moveBugRandom(iv)
+        }
+    }
+
+
+
+    private fun moveBugRandom(iv: ImageView) {
         gameField.post {
             val w = gameField.width
             val h = gameField.height
@@ -261,15 +275,20 @@ class GameFragment : Fragment() {
                 interpolator = smooth()
             }
 
+            // добавляем в список, чтобы потом остановить
+            bugAnimators.add(animX)
+            bugAnimators.add(animY)
+
             animX.start()
             animY.start()
 
             viewLifecycleOwner.lifecycleScope.launch {
                 delay(duration)
-                if (iv.parent != null) gameField.removeView(iv)
+                if (iv.parent != null && !tiltModeActive) gameField.removeView(iv)
             }
         }
     }
+
 
     private fun smooth(): TimeInterpolator = AccelerateDecelerateInterpolator()
 
@@ -313,10 +332,10 @@ class GameFragment : Fragment() {
                 if (isRunning && !isPaused) {
                     updateScore(+50)
                     gameField.removeView(this)
+                    activateTiltMode()
                 }
             }
         }
-
         gameField.addView(iv)
         gameField.post {
             val w = gameField.width
@@ -331,6 +350,51 @@ class GameFragment : Fragment() {
             }
         }
     }
+
+    private fun activateTiltMode() {
+        tiltModeActive = true
+
+        // стопим все анимации у уже появившихся жуков
+        for (i in 0 until gameField.childCount) {
+            val v = gameField.getChildAt(i)
+            if (v.tag == "bug") {
+                v.animate().cancel()
+                v.clearAnimation()
+            }
+        }
+
+        // включаем сенсор
+        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+
+        // через 5 секунд выключаем tilt-режим
+        viewLifecycleOwner.lifecycleScope.launch {
+            delay(5000L)
+            tiltModeActive = false
+            sensorManager?.unregisterListener(this@GameFragment)
+        }
+
+        Toast.makeText(requireContext(), "Tilt-режим активирован!", Toast.LENGTH_SHORT).show()
+    }
+
+    // -------------------- Акселерометр --------------------
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (!tiltModeActive || event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
+
+        val ax = -event.values[0] * 5
+        val ay = event.values[1] * 5
+
+        for (i in 0 until gameField.childCount) {
+            val v = gameField.getChildAt(i)
+            if (v.tag == "bug") {
+                v.x = (v.x + ax).coerceIn(0f, gameField.width - v.width.toFloat())
+                v.y = (v.y + ay).coerceIn(0f, gameField.height - v.height.toFloat())
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     // -------------------- Служебные --------------------
     private fun updateScore(delta: Int) {
@@ -347,5 +411,6 @@ class GameFragment : Fragment() {
         timer?.cancel()
         spawnerJob?.cancel()
         bonusJob?.cancel()
+        sensorManager?.unregisterListener(this)
     }
 }
