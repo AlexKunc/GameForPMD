@@ -28,7 +28,7 @@ class GameFragment : Fragment() {
     private var roundMs = 30_000L
     private var bonusIntervalSec = 15
     private var maxBugs = 5
-    private var speed = 3                  // «скорость игры» (1..10)
+    private var difficulty  = 3                  // «скорость игры» (1..10)
     private var isRunning = false
     private var isPaused = false
 
@@ -52,7 +52,7 @@ class GameFragment : Fragment() {
 
         // Подхватываем настройки из SharedPreferences (из вкладки «Настройки»)
         val p = requireContext().getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        speed = p.getInt("speed", 3).coerceIn(1, 10)
+        difficulty  = p.getInt("speed", 3).coerceIn(1, 10)
         maxBugs = p.getInt("maxCockroaches", 5).coerceAtLeast(1)
         bonusIntervalSec = p.getInt("bonusInterval", 15).coerceAtLeast(5)
         val roundSec = p.getInt("roundDuration", 30).coerceAtLeast(10)
@@ -203,7 +203,7 @@ class GameFragment : Fragment() {
             iv.y = start.y
 
             val distance = max(1f, dist(start, end))
-            val baseSpeed = (11 - speed) * 300L // чем выше speed, тем быстрее (меньше время)
+            val baseSpeed = (11 - difficulty ) * 300L // чем выше speed, тем быстрее (меньше время)
             val duration = (distance / 300f * baseSpeed).toLong().coerceIn(500L, 6000L)
 
             val animX = ObjectAnimator.ofFloat(iv, View.X, start.x, end.x).apply {

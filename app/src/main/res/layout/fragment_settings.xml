@@ -1,66 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:padding="16dp"
+    tools:context=".SettingsFragment">
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- Уровень сложности -->
+    <TextView
+        android:id="@+id/textDifficultyLabel"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:dividerHeight="12dp">
+        android:text="Уровень сложности:"
+        android:textSize="16sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Скорость игры -->
-        <TextView
-            android:id="@+id/textSpeed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Скорость игры: 1" />
+    <SeekBar
+        android:id="@+id/seekBarDifficulty"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="10"
+        android:progress="3"
+        app:layout_constraintTop_toBottomOf="@id/textDifficultyLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <SeekBar
-            android:id="@+id/seekBarSpeed"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="10" />
+    <!-- Максимум тараканов -->
+    <TextView
+        android:id="@+id/textMaxCockroachesLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Максимум тараканов:"
+        android:textSize="16sp"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/seekBarDifficulty"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Максимум тараканов -->
-        <TextView
-            android:id="@+id/textMaxCockroaches"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Максимум тараканов: 5" />
+    <SeekBar
+        android:id="@+id/seekBarMaxCockroaches"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="20"
+        android:progress="5"
+        app:layout_constraintTop_toBottomOf="@id/textMaxCockroachesLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <SeekBar
-            android:id="@+id/seekBarMaxCockroaches"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="20" />
+    <!-- Интервал бонусов -->
+    <TextView
+        android:id="@+id/textBonusIntervalLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Интервал появления бонусов (сек):"
+        android:textSize="16sp"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/seekBarMaxCockroaches"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Интервал бонусов -->
-        <TextView
-            android:id="@+id/textBonusInterval"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Интервал бонусов (сек): 10" />
+    <SeekBar
+        android:id="@+id/seekBarBonusInterval"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="30"
+        android:progress="15"
+        app:layout_constraintTop_toBottomOf="@id/textBonusIntervalLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <SeekBar
-            android:id="@+id/seekBarBonusInterval"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="60" />
+    <!-- Длительность раунда -->
+    <TextView
+        android:id="@+id/textRoundDurationLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Длительность раунда (сек):"
+        android:textSize="16sp"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/seekBarBonusInterval"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Длительность раунда -->
-        <TextView
-            android:id="@+id/textRoundDuration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Длительность раунда (сек): 30" />
+    <SeekBar
+        android:id="@+id/seekBarRoundDuration"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:max="120"
+        android:progress="30"
+        app:layout_constraintTop_toBottomOf="@id/textRoundDurationLabel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <SeekBar
-            android:id="@+id/seekBarRoundDuration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="300" />
-
-    </LinearLayout>
-</ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
