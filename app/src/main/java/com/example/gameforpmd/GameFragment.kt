@@ -1,19 +1,32 @@
 package com.example.gameforpmd
 
-import android.animation.ObjectAnimator
-import android.animation.TimeInterpolator
 import android.content.Context
 import android.graphics.PointF
 import android.os.Bundle
 import android.os.CountDownTimer
-import android.view.*
-import android.widget.*
-import androidx.core.view.doOnLayout
+import android.util.Log
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.*
+import com.example.gameforpmd.data.db.Score
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.max
+import kotlin.math.sqrt
 import kotlin.random.Random
+import android.animation.ObjectAnimator
+import android.animation.TimeInterpolator
+import android.view.animation.AccelerateDecelerateInterpolator
 
 class GameFragment : Fragment() {
 
@@ -28,7 +41,8 @@ class GameFragment : Fragment() {
     private var roundMs = 30_000L
     private var bonusIntervalSec = 15
     private var maxBugs = 5
-    private var difficulty  = 3                  // «скорость игры» (1..10)
+    private var difficulty = 3   // теперь вместо speed
+
     private var isRunning = false
     private var isPaused = false
 
@@ -36,7 +50,7 @@ class GameFragment : Fragment() {
     private var spawnerJob: Job? = null
     private var bonusJob: Job? = null
 
-    private val prefsName = "game_settings"
+    private var remainingMs = 0L
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -50,9 +64,9 @@ class GameFragment : Fragment() {
         btnPause = view.findViewById(R.id.btnPause)
         btnStop = view.findViewById(R.id.btnStop)
 
-        // Подхватываем настройки из SharedPreferences (из вкладки «Настройки»)
-        val p = requireContext().getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        difficulty  = p.getInt("speed", 3).coerceIn(1, 10)
+        // Подхватываем настройки
+        val p = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
+        difficulty = p.getInt("difficulty", 3).coerceIn(1, 10)
         maxBugs = p.getInt("maxCockroaches", 5).coerceAtLeast(1)
         bonusIntervalSec = p.getInt("bonusInterval", 15).coerceAtLeast(5)
         val roundSec = p.getInt("roundDuration", 30).coerceAtLeast(10)
@@ -61,11 +75,8 @@ class GameFragment : Fragment() {
         updateScore(0)
         updateTimer(roundMs)
 
-        // Клик по пустому полю = промах => -5 очков
         gameField.setOnTouchListener { _, event ->
             if (isRunning && !isPaused && event.action == MotionEvent.ACTION_DOWN) {
-                // Если попали не по жуку (жуки сами перехватят клик),
-                // считаем промах: штраф
                 updateScore(-5)
             }
             false
@@ -76,52 +87,36 @@ class GameFragment : Fragment() {
         btnStop.setOnClickListener { stopGame() }
     }
 
-    private fun startGame() {
-        if (isRunning) return
-        isRunning = true
-        isPaused = false
-        score = 0
-        updateScore(0)
-        clearField()
-        startTimer(roundMs)
-        // Ждём, пока поле измерится, чтобы знать размеры
-        gameField.doOnLayout {
-            startSpawning()
-            startBonusSpawning()
+    // -------------------- Сохранение результата --------------------
+    private fun saveResult(points: Int) {
+        val prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val userId = prefs.getInt("current_user_id", -1)
+        if (userId == -1) {
+            Log.d("GameFragment", "Игрок не выбран, результат не сохранён")
+            return
+        }
+
+        lifecycleScope.launch {
+            val scoreEntity = Score(
+                userId = userId,
+                points = points,
+                difficulty = difficulty,
+                roundDuration = (roundMs / 1000).toInt(),
+                maxBugs = maxBugs,
+                bonusInterval = bonusIntervalSec
+            )
+
+            MyApp.db.scoreDao().insert(scoreEntity)
+
+            Log.d(
+                "GameFragment",
+                "Результат сохранён: $points очков (userId=$userId, сложность=$difficulty, раунд=${roundMs/1000}с, жуки=$maxBugs, бонус=${bonusIntervalSec}с)"
+            )
         }
     }
 
-    private fun togglePause() {
-        if (!isRunning) return
-        isPaused = !isPaused
-        if (isPaused) {
-            timer?.cancel()
-            spawnerJob?.cancel()
-            bonusJob?.cancel()
-            Toast.makeText(requireContext(), "Пауза", Toast.LENGTH_SHORT).show()
-        } else {
-            // продолжить
-            startTimer(remainingMs)
-            startSpawning()
-            startBonusSpawning()
-            Toast.makeText(requireContext(), "Продолжаем!", Toast.LENGTH_SHORT).show()
-        }
-    }
 
-    private fun stopGame() {
-        isRunning = false
-        isPaused = false
-        timer?.cancel()
-        spawnerJob?.cancel()
-        bonusJob?.cancel()
-        clearField()
-        updateTimer(roundMs)
-        Toast.makeText(requireContext(), "Игра остановлена", Toast.LENGTH_SHORT).show()
-    }
-
-    // -------------------- Таймер раунда --------------------
-    private var remainingMs = 0L
-
+    // -------------------- Таймер --------------------
     private fun startTimer(totalMs: Long) {
         remainingMs = totalMs
         timer?.cancel()
@@ -130,6 +125,7 @@ class GameFragment : Fragment() {
                 remainingMs = millisUntilFinished
                 updateTimer(millisUntilFinished)
             }
+
             override fun onFinish() {
                 updateTimer(0)
                 finishRound()
@@ -149,9 +145,54 @@ class GameFragment : Fragment() {
         spawnerJob?.cancel()
         bonusJob?.cancel()
         Toast.makeText(requireContext(), "Раунд окончен! Счёт: $score", Toast.LENGTH_LONG).show()
+
+        // сохраняем результат в базу
+        saveResult(score)
     }
 
-    // -------------------- Спавн жуков --------------------
+    // -------------------- Управление --------------------
+    private fun startGame() {
+        if (isRunning) return
+        isRunning = true
+        isPaused = false
+        score = 0
+        updateScore(0)
+        clearField()
+        startTimer(roundMs)
+        gameField.post {
+            startSpawning()
+            startBonusSpawning()
+        }
+    }
+
+    private fun togglePause() {
+        if (!isRunning) return
+        isPaused = !isPaused
+        if (isPaused) {
+            timer?.cancel()
+            spawnerJob?.cancel()
+            bonusJob?.cancel()
+            Toast.makeText(requireContext(), "Пауза", Toast.LENGTH_SHORT).show()
+        } else {
+            startTimer(remainingMs)
+            startSpawning()
+            startBonusSpawning()
+            Toast.makeText(requireContext(), "Продолжаем!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun stopGame() {
+        isRunning = false
+        isPaused = false
+        timer?.cancel()
+        spawnerJob?.cancel()
+        bonusJob?.cancel()
+        clearField()
+        updateTimer(roundMs)
+        Toast.makeText(requireContext(), "Игра остановлена", Toast.LENGTH_SHORT).show()
+    }
+
+    // -------------------- Жуки --------------------
     private fun startSpawning() {
         spawnerJob?.cancel()
         spawnerJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -162,26 +203,24 @@ class GameFragment : Fragment() {
                     }
                     if (currentBugs < maxBugs) addBug()
                 }
-                delay(500L) // частота проверок
+                delay(500L)
             }
         }
     }
 
     private fun addBug() {
-        // размер картинки жука ~64dp (подложи drawable bug.png)
         val iv = ImageView(requireContext()).apply {
             val bugVariants = listOf(
                 R.drawable.bug,
                 R.drawable.bug2,
                 R.drawable.bug3
             )
-            setImageResource(bugVariants.random()) // добавь в res/drawable/bug.png
+            setImageResource(bugVariants.random())
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
             tag = "bug"
-            // тап по жуку = +10 очков, удалить жука
             setOnClickListener {
                 if (isRunning && !isPaused) {
                     updateScore(+10)
@@ -191,8 +230,6 @@ class GameFragment : Fragment() {
         }
 
         gameField.addView(iv)
-
-        // Случайное место старта и финиша, анимация «ползти»
         gameField.post {
             val w = gameField.width
             val h = gameField.height
@@ -203,7 +240,7 @@ class GameFragment : Fragment() {
             iv.y = start.y
 
             val distance = max(1f, dist(start, end))
-            val baseSpeed = (11 - difficulty ) * 300L // чем выше speed, тем быстрее (меньше время)
+            val baseSpeed = (11 - difficulty) * 300L
             val duration = (distance / 300f * baseSpeed).toLong().coerceIn(500L, 6000L)
 
             val animX = ObjectAnimator.ofFloat(iv, View.X, start.x, end.x).apply {
@@ -218,7 +255,6 @@ class GameFragment : Fragment() {
             animX.start()
             animY.start()
 
-            // когда «уполз» — убрать
             viewLifecycleOwner.lifecycleScope.launch {
                 delay(duration)
                 if (iv.parent != null) gameField.removeView(iv)
@@ -226,26 +262,23 @@ class GameFragment : Fragment() {
         }
     }
 
-    private fun smooth(): TimeInterpolator = android.view.animation.AccelerateDecelerateInterpolator()
+    private fun smooth(): TimeInterpolator = AccelerateDecelerateInterpolator()
 
     private fun randomEdgePoint(w: Int, h: Int): PointF {
-        val edge = Random.nextInt(4) // 0=left,1=top,2=right,3=bottom
-        val x: Float
-        val y: Float
+        val edge = Random.Default.nextInt(4)
         val pad = 10
-        when (edge) {
-            0 -> { x = pad.toFloat(); y = Random.nextInt(pad, max(1, h - pad)).toFloat() }
-            1 -> { x = Random.nextInt(pad, max(1, w - pad)).toFloat(); y = pad.toFloat() }
-            2 -> { x = (w - pad).toFloat(); y = Random.nextInt(pad, max(1, h - pad)).toFloat() }
-            else -> { x = Random.nextInt(pad, max(1, w - pad)).toFloat(); y = (h - pad).toFloat() }
+        return when (edge) {
+            0 -> PointF(pad.toFloat(), Random.nextInt(pad, max(1, h - pad)).toFloat())
+            1 -> PointF(Random.nextInt(pad, max(1, w - pad)).toFloat(), pad.toFloat())
+            2 -> PointF((w - pad).toFloat(), Random.nextInt(pad, max(1, h - pad)).toFloat())
+            else -> PointF(Random.nextInt(pad, max(1, w - pad)).toFloat(), (h - pad).toFloat())
         }
-        return PointF(x, y)
     }
 
     private fun dist(a: PointF, b: PointF): Float {
         val dx = a.x - b.x
         val dy = a.y - b.y
-        return kotlin.math.sqrt(dx*dx + dy*dy)
+        return sqrt(dx * dx + dy * dy)
     }
 
     // -------------------- Бонусы --------------------
@@ -261,13 +294,12 @@ class GameFragment : Fragment() {
 
     private fun addBonus() {
         val iv = ImageView(requireContext()).apply {
-            setImageResource(R.drawable.bonus) // добавь drawable/bonus.png
+            setImageResource(R.drawable.bonus)
             tag = "bonus"
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            // тап по бонусу = +50 очков
             setOnClickListener {
                 if (isRunning && !isPaused) {
                     updateScore(+50)
@@ -278,14 +310,12 @@ class GameFragment : Fragment() {
 
         gameField.addView(iv)
         gameField.post {
-            // случайная позиция внутри поля
             val w = gameField.width
             val h = gameField.height
             val margin = 100
             iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
             iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
 
-            // бонус живёт 3 секунды
             viewLifecycleOwner.lifecycleScope.launch {
                 delay(3000L)
                 if (iv.parent != null) gameField.removeView(iv)
@@ -293,7 +323,7 @@ class GameFragment : Fragment() {
         }
     }
 
-    // -------------------- Служебное --------------------
+    // -------------------- Служебные --------------------
     private fun updateScore(delta: Int) {
         score = (score + delta).coerceAtLeast(0)
         textScore.text = "Счёт: $score"

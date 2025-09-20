@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
-import com.example.gameforpmd.data.db.User
+import com.example.gameforpmd.ui.records.RecordsFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
@@ -28,9 +28,10 @@ class MainActivity : AppCompatActivity() {
             RegisterFragment(),
             RulesFragment(),
             AuthorsFragment(),
-            SettingsFragment()
+            SettingsFragment(),
+            RecordsFragment()
         )
-        val titles = listOf("Игра", "Регистрация", "Правила", "Авторы", "Настройки")
+        val titles = listOf("Игра", "Регистрация", "Правила", "Авторы", "Настройки", "Рекорды")
 
         viewPager.adapter = ViewPagerAdapter(this, fragments)
 
