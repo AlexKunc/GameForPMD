@@ -11,21 +11,10 @@ import androidx.fragment.app.Fragment
 
 class SettingsFragment : Fragment() {
 
-    private lateinit var textSpeed: TextView
-    private lateinit var textMaxCockroaches: TextView
-    private lateinit var textBonusInterval: TextView
-    private lateinit var textRoundDuration: TextView
-
-    private lateinit var seekBarSpeed: SeekBar
-    private lateinit var seekBarMaxCockroaches: SeekBar
-    private lateinit var seekBarBonusInterval: SeekBar
-    private lateinit var seekBarRoundDuration: SeekBar
-
-    private val PREFS = "game_settings"
+    private val prefsName = "game_settings"
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
+        inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_settings, container, false)
@@ -34,51 +23,62 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        textSpeed = view.findViewById(R.id.textSpeed)
-        textMaxCockroaches = view.findViewById(R.id.textMaxCockroaches)
-        textBonusInterval = view.findViewById(R.id.textBonusInterval)
-        textRoundDuration = view.findViewById(R.id.textRoundDuration)
+        val prefs = requireContext().getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
-        seekBarSpeed = view.findViewById(R.id.seekBarSpeed)
-        seekBarMaxCockroaches = view.findViewById(R.id.seekBarMaxCockroaches)
-        seekBarBonusInterval = view.findViewById(R.id.seekBarBonusInterval)
-        seekBarRoundDuration = view.findViewById(R.id.seekBarRoundDuration)
+        // Уровень сложности
+        val seekBarDifficulty = view.findViewById<SeekBar>(R.id.seekBarDifficulty)
+        val textDifficultyLabel = view.findViewById<TextView>(R.id.textDifficultyLabel)
+        seekBarDifficulty.progress = prefs.getInt("difficulty", 3)
+        textDifficultyLabel.text = "Уровень сложности: ${seekBarDifficulty.progress}"
+        seekBarDifficulty.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                textDifficultyLabel.text = "Уровень сложности: $progress"
+                prefs.edit().putInt("difficulty", progress).apply()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
 
-        val prefs = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-        // Загружаем сохранённые значения
-        seekBarSpeed.progress = prefs.getInt("speed", 1)
+        // Максимум тараканов
+        val seekBarMaxCockroaches = view.findViewById<SeekBar>(R.id.seekBarMaxCockroaches)
+        val textMaxCockroachesLabel = view.findViewById<TextView>(R.id.textMaxCockroachesLabel)
         seekBarMaxCockroaches.progress = prefs.getInt("maxCockroaches", 5)
-        seekBarBonusInterval.progress = prefs.getInt("bonusInterval", 10)
+        textMaxCockroachesLabel.text = "Максимум тараканов: ${seekBarMaxCockroaches.progress}"
+        seekBarMaxCockroaches.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                textMaxCockroachesLabel.text = "Максимум тараканов: $progress"
+                prefs.edit().putInt("maxCockroaches", progress).apply()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // Интервал бонусов
+        val seekBarBonusInterval = view.findViewById<SeekBar>(R.id.seekBarBonusInterval)
+        val textBonusIntervalLabel = view.findViewById<TextView>(R.id.textBonusIntervalLabel)
+        seekBarBonusInterval.progress = prefs.getInt("bonusInterval", 15)
+        textBonusIntervalLabel.text = "Интервал появления бонусов (сек): ${seekBarBonusInterval.progress}"
+        seekBarBonusInterval.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                textBonusIntervalLabel.text = "Интервал появления бонусов (сек): $progress"
+                prefs.edit().putInt("bonusInterval", progress).apply()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
+        // Длительность раунда
+        val seekBarRoundDuration = view.findViewById<SeekBar>(R.id.seekBarRoundDuration)
+        val textRoundDurationLabel = view.findViewById<TextView>(R.id.textRoundDurationLabel)
         seekBarRoundDuration.progress = prefs.getInt("roundDuration", 30)
-
-        updateLabels()
-
-        // Слушатели
-        seekBarSpeed.setOnSeekBarChangeListener(makeListener("speed", textSpeed, "Скорость игры: "))
-        seekBarMaxCockroaches.setOnSeekBarChangeListener(makeListener("maxCockroaches", textMaxCockroaches, "Максимум тараканов: "))
-        seekBarBonusInterval.setOnSeekBarChangeListener(makeListener("bonusInterval", textBonusInterval, "Интервал бонусов (сек): "))
-        seekBarRoundDuration.setOnSeekBarChangeListener(makeListener("roundDuration", textRoundDuration, "Длительность раунда (сек): "))
-    }
-
-    private fun makeListener(key: String, label: TextView, prefix: String): SeekBar.OnSeekBarChangeListener {
-        return object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                label.text = "$prefix $progress"
+        textRoundDurationLabel.text = "Длительность раунда (сек): ${seekBarRoundDuration.progress}"
+        seekBarRoundDuration.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                textRoundDurationLabel.text = "Длительность раунда (сек): $progress"
+                prefs.edit().putInt("roundDuration", progress).apply()
             }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                val prefs = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                prefs.edit().putInt(key, seekBar?.progress ?: 0).apply()
-            }
-        }
-    }
-
-    private fun updateLabels() {
-        textSpeed.text = "Скорость игры: ${seekBarSpeed.progress}"
-        textMaxCockroaches.text = "Максимум тараканов: ${seekBarMaxCockroaches.progress}"
-        textBonusInterval.text = "Интервал бонусов (сек): ${seekBarBonusInterval.progress}"
-        textRoundDuration.text = "Длительность раунда (сек): ${seekBarRoundDuration.progress}"
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
     }
 }
