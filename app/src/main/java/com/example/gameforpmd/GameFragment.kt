@@ -74,6 +74,19 @@ class GameFragment : Fragment(), SensorEventListener {
             textScore.text = "Счёт: $newScore"
         }
 
+        gameViewModel.tiltModeEndTime.observe(viewLifecycleOwner) { endTime ->
+            if (endTime != null) {
+                val remaining = endTime - System.currentTimeMillis()
+                if (remaining > 0) {
+                    startTiltMode(remaining)
+                } else {
+                    stopTiltMode()
+                }
+            } else {
+                stopTiltMode()
+            }
+        }
+
         gameViewModel.gameFinished.observe(viewLifecycleOwner) {
             finishRound()
         }
@@ -127,6 +140,55 @@ class GameFragment : Fragment(), SensorEventListener {
             }
         }
     }
+
+    private fun startTiltMode(remaining: Long) {
+        if (tiltModeActive) return
+        tiltModeActive = true
+
+        // останавливаем анимации жуков
+        for (i in 0 until gameField.childCount) {
+            val v = gameField.getChildAt(i)
+            if (v.tag == "bug") {
+                v.animate().cancel()
+                v.clearAnimation()
+            }
+        }
+
+        // включаем сенсоры
+        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+
+        // запускаем звук
+        screamPlayer?.release()
+        screamPlayer = MediaPlayer.create(requireContext(), R.raw.scream)
+        screamPlayer?.seekTo(31500)
+        screamPlayer?.start()
+
+        // ждём оставшееся время и потом выключаем
+        viewLifecycleOwner.lifecycleScope.launch {
+            delay(remaining)
+            gameViewModel.clearTilt()
+        }
+    }
+
+    private fun stopTiltMode() {
+        if (!tiltModeActive) return
+        tiltModeActive = false
+
+        sensorManager?.unregisterListener(this)
+        screamPlayer?.stop()
+        screamPlayer?.release()
+        screamPlayer = null
+
+        for (i in 0 until gameField.childCount) {
+            val v = gameField.getChildAt(i)
+            if (v is ImageView && v.tag == "bug") moveBugRandom(v)
+        }
+
+        Toast.makeText(requireContext(), "Tilt-режим завершён", Toast.LENGTH_SHORT).show()
+    }
+
 
     private fun addGoldenBug() {
         val iv = ImageView(requireContext()).apply {
@@ -367,41 +429,15 @@ class GameFragment : Fragment(), SensorEventListener {
     }
 
     private fun activateTiltMode() {
-        if (tiltModeActive) return
-        tiltModeActive = true
-        for (i in 0 until gameField.childCount) {
-            val v = gameField.getChildAt(i)
-            if (v.tag == "bug") {
-                v.animate().cancel()
-                v.clearAnimation()
-            }
-        }
+        // Длительность tilt-режима
+        val duration = 9400L
 
-        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
-            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
-
-        screamPlayer?.release()
-        screamPlayer = MediaPlayer.create(requireContext(), R.raw.scream)
-        screamPlayer?.seekTo(31500)
-        screamPlayer?.start()
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            delay(9400L)
-            tiltModeActive = false
-            sensorManager?.unregisterListener(this@GameFragment)
-            screamPlayer?.stop()
-            screamPlayer?.release()
-            screamPlayer = null
-            for (i in 0 until gameField.childCount) {
-                val v = gameField.getChildAt(i)
-                if (v is ImageView && v.tag == "bug") moveBugRandom(v)
-            }
-            Toast.makeText(requireContext(), "Tilt-режим завершён", Toast.LENGTH_SHORT).show()
-        }
+        // Сообщаем во ViewModel конечное время
+        gameViewModel.activateTilt(duration)
 
         Toast.makeText(requireContext(), "Tilt-режим активирован!", Toast.LENGTH_SHORT).show()
     }
+
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (!tiltModeActive || event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
