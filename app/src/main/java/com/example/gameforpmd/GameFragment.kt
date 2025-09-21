@@ -7,8 +7,9 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.util.Log
+import org.koin.androidx.viewmodel.ext.android.viewModel
+import com.example.gameforpmd.ui.game.GameViewModel
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -42,27 +43,16 @@ class GameFragment : Fragment(), SensorEventListener {
     private var screamPlayer: MediaPlayer? = null
     private lateinit var btnStart: Button
     private lateinit var btnPause: Button
-
-    private val bugAnimators = mutableListOf<ObjectAnimator>()
     private lateinit var btnStop: Button
 
-    private var score = 0
-    private var roundMs = 30_000L
-    private var bonusIntervalSec = 15
-    private var maxBugs = 5
-    private var difficulty = 3
+    private val bugAnimators = mutableListOf<ObjectAnimator>()
+    private val gameViewModel: GameViewModel by viewModel()
 
-    private var isRunning = false
-    private var isPaused = false
     private var goldenBugJob: Job? = null
-    private var goldRate: Float = 0f
-    private var timer: CountDownTimer? = null
     private var spawnerJob: Job? = null
     private var bonusJob: Job? = null
 
-    private var remainingMs = 0L
-
-    // --- tilt ---
+    private var goldRate: Float = 0f
     private var sensorManager: SensorManager? = null
     private var tiltModeActive = false
 
@@ -80,25 +70,39 @@ class GameFragment : Fragment(), SensorEventListener {
 
         sensorManager = requireContext().getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
-        val p = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
-        difficulty = p.getInt("difficulty", 3).coerceIn(1, 10)
-        maxBugs = p.getInt("maxCockroaches", 5).coerceAtLeast(1)
-        bonusIntervalSec = p.getInt("bonusInterval", 15).coerceAtLeast(5)
-        val roundSec = p.getInt("roundDuration", 30).coerceAtLeast(10)
-        roundMs = roundSec * 1000L
+        gameViewModel.score.observe(viewLifecycleOwner) { newScore ->
+            textScore.text = "Счёт: $newScore"
+        }
 
-        // 🔥 загружаем курс золота из SharedPreferences
+        gameViewModel.gameFinished.observe(viewLifecycleOwner) { finished ->
+            if (finished == true) {
+                finishRound()
+            }
+        }
+
+        gameViewModel.remainingMs.observe(viewLifecycleOwner) { ms ->
+            val totalSec = ((ms ?: gameViewModel.roundMs) / 1000).toInt()
+            val m = totalSec / 60
+            val s = totalSec % 60
+            textTimer.text = "Время: %02d:%02d".format(m, s)
+
+        }
+
+        val p = requireContext().getSharedPreferences("game_settings", Context.MODE_PRIVATE)
+        gameViewModel.difficulty = p.getInt("difficulty", 3).coerceIn(1, 10)
+        gameViewModel.maxBugs = p.getInt("maxCockroaches", 5).coerceAtLeast(1)
+        gameViewModel.bonusIntervalSec = p.getInt("bonusInterval", 15).coerceAtLeast(5)
+        val roundSec = p.getInt("roundDuration", 30).coerceAtLeast(10)
+        gameViewModel.roundMs = roundSec * 1000L
+
         val goldPrefs = requireContext().getSharedPreferences("gold_prefs", Context.MODE_PRIVATE)
         val savedRate = goldPrefs.getString("gold_rate", null)
         goldRate = savedRate?.replace(",", ".")?.toFloatOrNull() ?: 0f
         Log.d("GameFragment", "Загружен курс золота: $goldRate ₽")
 
-        updateScore(0)
-        updateTimer(roundMs)
-
         gameField.setOnTouchListener { _, event ->
-            if (isRunning && !isPaused && event.action == MotionEvent.ACTION_DOWN) {
-                updateScore(-500)
+            if (gameViewModel.isRunning.value && !gameViewModel.isPaused.value && event.action == MotionEvent.ACTION_DOWN) {
+                gameViewModel.addScore(-500)
             }
             false
         }
@@ -106,15 +110,22 @@ class GameFragment : Fragment(), SensorEventListener {
         btnStart.setOnClickListener { startGame() }
         btnPause.setOnClickListener { togglePause() }
         btnStop.setOnClickListener { stopGame() }
+
+        if (gameViewModel.isRunning.value) {
+            gameField.post {
+                startSpawning()
+                startBonusSpawning()
+                startGoldenBugSpawning()
+            }
+        }
     }
 
-    // -------------------- Золотой жук --------------------
     private fun startGoldenBugSpawning() {
         goldenBugJob?.cancel()
         goldenBugJob = viewLifecycleOwner.lifecycleScope.launch {
-            while (isActive && isRunning) {
-                if (!isPaused) addGoldenBug()
-                delay(20_000L) // каждые 20 секунд
+            while (isActive && gameViewModel.isRunning.value) {
+                if (!gameViewModel.isPaused.value) addGoldenBug()
+                delay(20_000L)
             }
         }
     }
@@ -128,9 +139,9 @@ class GameFragment : Fragment(), SensorEventListener {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
             setOnClickListener {
-                if (isRunning && !isPaused) {
+                if (gameViewModel.isRunning.value && !gameViewModel.isPaused.value) {
                     val points = goldRate.toInt().coerceAtLeast(1)
-                    updateScore(points)
+                    gameViewModel.addScore(points)
                     gameField.removeView(this)
                     Toast.makeText(
                         requireContext(),
@@ -148,17 +159,15 @@ class GameFragment : Fragment(), SensorEventListener {
             val margin = 100
             iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
             iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
-
             moveBugRandom(iv)
         }
     }
 
-    // -------------------- Сохранение результата --------------------
     private fun saveResult(points: Int) {
         val prefsUser = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val userId = prefsUser.getInt("current_user_id", -1)
         if (userId == -1) {
-            Log.d("GameFragment", "Игрок не выбран, результат не сохранён")
+            Log.d("GameFragment", "saveResult: userId == -1 → результат не сохраняется")
             return
         }
 
@@ -177,97 +186,68 @@ class GameFragment : Fragment(), SensorEventListener {
                 maxBugs = maxBugsNow,
                 bonusInterval = bonusIntervalNow
             )
+            Log.d("GameFragment", "saveResult: вставляем $scoreEntity")
             MyApp.db.scoreDao().insert(scoreEntity)
-            Log.d("GameFragment", "Результат сохранён: $points очков (userId=$userId)")
+            Log.d("GameFragment", "saveResult: вставка завершена")
         }
     }
 
-    // -------------------- Таймер --------------------
-    private fun startTimer(totalMs: Long) {
-        remainingMs = totalMs
-        timer?.cancel()
-        timer = object : CountDownTimer(totalMs, 100L) {
-            override fun onTick(millisUntilFinished: Long) {
-                remainingMs = millisUntilFinished
-                updateTimer(millisUntilFinished)
-            }
-
-            override fun onFinish() {
-                updateTimer(0)
-                finishRound()
-            }
-        }.start()
-    }
-
-    private fun updateTimer(ms: Long) {
-        val totalSec = (ms / 1000).toInt()
-        val m = totalSec / 60
-        val s = totalSec % 60
-        textTimer.text = "Время: %02d:%02d".format(m, s)
-    }
-
     private fun finishRound() {
-        isRunning = false
-        spawnerJob?.cancel()
-        bonusJob?.cancel()
-        Toast.makeText(requireContext(), "Раунд окончен! Счёт: $score", Toast.LENGTH_LONG).show()
-        saveResult(score)
+//        gameViewModel.stopGame()
+        Toast.makeText( 
+            requireContext(),
+            "Раунд окончен! Счёт: ${gameViewModel.score.value}",
+            Toast.LENGTH_LONG
+        ).show()
+        saveResult(gameViewModel.score.value ?: 0)
     }
 
-    // -------------------- Управление --------------------
     private fun startGame() {
-        if (isRunning) return
-        isRunning = true
-        isPaused = false
-        score = 0
-        updateScore(0)
+        gameViewModel.startGame()
         clearField()
-        startTimer(roundMs)
         gameField.post {
             startSpawning()
             startBonusSpawning()
             startGoldenBugSpawning()
         }
+        Toast.makeText(requireContext(), "Игра началась!", Toast.LENGTH_SHORT).show()
     }
 
     private fun togglePause() {
-        if (!isRunning) return
-        isPaused = !isPaused
-        if (isPaused) {
-            timer?.cancel()
+        gameViewModel.pauseGame()
+        if (gameViewModel.isPaused.value) {
             spawnerJob?.cancel()
             bonusJob?.cancel()
+            goldenBugJob?.cancel()
             Toast.makeText(requireContext(), "Пауза", Toast.LENGTH_SHORT).show()
         } else {
-            startTimer(remainingMs)
-            startSpawning()
-            startBonusSpawning()
+            gameField.post {
+                startSpawning()
+                startBonusSpawning()
+                startGoldenBugSpawning()
+            }
             Toast.makeText(requireContext(), "Продолжаем!", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun stopGame() {
-        isRunning = false
-        isPaused = false
-        timer?.cancel()
+        gameViewModel.stopGame()
         spawnerJob?.cancel()
         bonusJob?.cancel()
         goldenBugJob?.cancel()
         clearField()
-        updateTimer(roundMs)
         Toast.makeText(requireContext(), "Игра остановлена", Toast.LENGTH_SHORT).show()
     }
 
-    // -------------------- Жуки --------------------
     private fun startSpawning() {
         spawnerJob?.cancel()
         spawnerJob = viewLifecycleOwner.lifecycleScope.launch {
-            while (isActive && isRunning) {
-                if (!isPaused) {
+            while (isActive && gameViewModel.isRunning.value) {
+                if (!gameViewModel.isPaused.value) {
                     val currentBugs = (0 until gameField.childCount).count {
                         (gameField.getChildAt(it).tag as? String) == "bug"
                     }
-                    if (currentBugs < maxBugs) addBug()
+                    if (currentBugs < gameViewModel.maxBugs) addBug()
                 }
                 delay(500L)
             }
@@ -284,8 +264,8 @@ class GameFragment : Fragment(), SensorEventListener {
             )
             tag = "bug"
             setOnClickListener {
-                if (isRunning && !isPaused) {
-                    updateScore(+1000)
+                if (gameViewModel.isRunning.value && !gameViewModel.isPaused.value) {
+                    gameViewModel.addScore(+1000)
                     gameField.removeView(this)
                 }
             }
@@ -296,33 +276,20 @@ class GameFragment : Fragment(), SensorEventListener {
             val w = gameField.width
             val h = gameField.height
             val margin = 100
-
-            // 🎯 случайная стартовая позиция
             iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
             iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
-
-            if (tiltModeActive) {
-                // если tilt включён → просто остаётся на месте
-            } else {
-                moveBugRandom(iv) // теперь стартует с этой позиции
-            }
+            if (!tiltModeActive) moveBugRandom(iv)
         }
     }
-
-
-
 
     private fun moveBugRandom(iv: ImageView) {
         gameField.post {
             val w = gameField.width
             val h = gameField.height
-
-            // Начало = текущая позиция жука
             val start = PointF(iv.x, iv.y)
             val end = randomEdgePoint(w, h)
-
             val distance = max(1f, dist(start, end))
-            val baseSpeed = (11 - difficulty) * 300L
+            val baseSpeed = (11 - gameViewModel.difficulty) * 300L
             val duration = (distance / 300f * baseSpeed).toLong().coerceIn(500L, 6000L)
 
             val animX = ObjectAnimator.ofFloat(iv, View.X, start.x, end.x).apply {
@@ -333,7 +300,6 @@ class GameFragment : Fragment(), SensorEventListener {
                 this.duration = duration
                 interpolator = smooth()
             }
-
             animX.start()
             animY.start()
 
@@ -343,8 +309,6 @@ class GameFragment : Fragment(), SensorEventListener {
             }
         }
     }
-
-
 
     private fun smooth(): TimeInterpolator = AccelerateDecelerateInterpolator()
 
@@ -365,13 +329,12 @@ class GameFragment : Fragment(), SensorEventListener {
         return sqrt(dx * dx + dy * dy)
     }
 
-    // -------------------- Бонусы --------------------
     private fun startBonusSpawning() {
         bonusJob?.cancel()
         bonusJob = viewLifecycleOwner.lifecycleScope.launch {
-            while (isActive && isRunning) {
-                if (!isPaused) addBonus()
-                delay(bonusIntervalSec * 1000L)
+            while (isActive && gameViewModel.isRunning.value) {
+                if (!gameViewModel.isPaused.value) addBonus()
+                delay(gameViewModel.bonusIntervalSec * 1000L)
             }
         }
     }
@@ -385,7 +348,7 @@ class GameFragment : Fragment(), SensorEventListener {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
             setOnClickListener {
-                if (isRunning && !isPaused) {
+                if (gameViewModel.isRunning.value && !gameViewModel.isPaused.value) {
                     gameField.removeView(this)
                     activateTiltMode()
                 }
@@ -398,7 +361,6 @@ class GameFragment : Fragment(), SensorEventListener {
             val margin = 100
             iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
             iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
-
             viewLifecycleOwner.lifecycleScope.launch {
                 delay(3000L)
                 if (iv.parent != null) gameField.removeView(iv)
@@ -408,8 +370,6 @@ class GameFragment : Fragment(), SensorEventListener {
 
     private fun activateTiltMode() {
         tiltModeActive = true
-
-        // стопим все анимации у уже появившихся жуков
         for (i in 0 until gameField.childCount) {
             val v = gameField.getChildAt(i)
             if (v.tag == "bug") {
@@ -418,48 +378,36 @@ class GameFragment : Fragment(), SensorEventListener {
             }
         }
 
-        // включаем сенсор
         sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
 
-        // Music
         screamPlayer?.release()
         screamPlayer = MediaPlayer.create(requireContext(), R.raw.scream)
         screamPlayer?.seekTo(31500)
         screamPlayer?.start()
 
-        // через 5 секунд выключаем tilt-режим
         viewLifecycleOwner.lifecycleScope.launch {
             delay(12500L)
             tiltModeActive = false
             sensorManager?.unregisterListener(this@GameFragment)
-
             screamPlayer?.stop()
             screamPlayer?.release()
             screamPlayer = null
-
-            // оживляем всех жуков заново
             for (i in 0 until gameField.childCount) {
                 val v = gameField.getChildAt(i)
-                if (v is ImageView && v.tag == "bug") {
-                    moveBugRandom(v)
-                }
+                if (v is ImageView && v.tag == "bug") moveBugRandom(v)
             }
-
             Toast.makeText(requireContext(), "Tilt-режим завершён", Toast.LENGTH_SHORT).show()
         }
 
         Toast.makeText(requireContext(), "Tilt-режим активирован!", Toast.LENGTH_SHORT).show()
     }
 
-    // -------------------- Акселерометр --------------------
     override fun onSensorChanged(event: SensorEvent?) {
         if (!tiltModeActive || event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
-
         val ax = -event.values[0] * 5
         val ay = event.values[1] * 5
-
         for (i in 0 until gameField.childCount) {
             val v = gameField.getChildAt(i)
             if (v.tag == "bug") {
@@ -471,21 +419,15 @@ class GameFragment : Fragment(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    // -------------------- Служебные --------------------
-    private fun updateScore(delta: Int) {
-        score = (score + delta).coerceAtLeast(0)
-        textScore.text = "Счёт: $score"
-    }
-
     private fun clearField() {
         gameField.removeAllViews()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        timer?.cancel()
         spawnerJob?.cancel()
         bonusJob?.cancel()
+        goldenBugJob?.cancel()
         sensorManager?.unregisterListener(this)
     }
 }
