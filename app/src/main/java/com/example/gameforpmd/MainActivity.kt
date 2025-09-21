@@ -47,7 +47,6 @@ class MainActivity : AppCompatActivity() {
             tab.text = titles[position]
         }.attach()
 
-        // 👉 проверка текущего пользователя
         lifecycleScope.launch {
             val users = MyApp.db.userDao().getAll()
             if (users.isNotEmpty()) {

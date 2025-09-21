@@ -36,7 +36,7 @@ class SettingsFragment : Fragment() {
         // минимальные значения
         val minDifficulty = 1
         val minMaxBugs = 5
-        val minBonusInterval = 10
+        val minBonusInterval = 15
         val minRoundDuration = 10
 
         // SharedPreferences
