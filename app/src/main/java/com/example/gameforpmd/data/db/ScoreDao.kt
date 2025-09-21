@@ -21,7 +21,9 @@ interface ScoreDao {
         SELECT userId, MAX(points) as maxPoints
         FROM scores
         GROUP BY userId
-    ) grouped ON s.userId = grouped.userId AND s.points = grouped.maxPoints
+    ) grouped 
+    ON s.userId = grouped.userId 
+       AND s.points = grouped.maxPoints
     ORDER BY s.points DESC
 """)
     suspend fun getBestScores(): List<Score>

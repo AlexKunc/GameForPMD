@@ -33,7 +33,7 @@ class MyApp : Application() {
         // Start Koin
         startKoin {
             androidContext(this@MyApp)
-            modules(appModule)   // ✅ а не "moduleS"
+            modules(appModule)
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.example.gameforpmd.utils.SingleLiveEvent
 
 class GameViewModel : ViewModel() {
 
@@ -26,8 +27,9 @@ class GameViewModel : ViewModel() {
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> get() = _isPaused
 
-    private val _gameFinished = MutableLiveData<Boolean>()
-    val gameFinished: LiveData<Boolean> get() = _gameFinished
+    private val _gameFinished = SingleLiveEvent<Unit>()
+    val gameFinished: LiveData<Unit> get() = _gameFinished
+
 
 
 
@@ -65,6 +67,7 @@ class GameViewModel : ViewModel() {
         _isPaused.value = false
         timer?.cancel()
         _remainingMs.value = roundMs
+        _score.value = 0
     }
 
     fun addScore(delta: Int) {
@@ -81,7 +84,7 @@ class GameViewModel : ViewModel() {
             override fun onFinish() {
                 _remainingMs.value = 0
                 _isRunning.value = false
-                _gameFinished.value = true
+                _gameFinished.call()
             }
         }.start()
     }

@@ -74,10 +74,8 @@ class GameFragment : Fragment(), SensorEventListener {
             textScore.text = "Счёт: $newScore"
         }
 
-        gameViewModel.gameFinished.observe(viewLifecycleOwner) { finished ->
-            if (finished == true) {
-                finishRound()
-            }
+        gameViewModel.gameFinished.observe(viewLifecycleOwner) {
+            finishRound()
         }
 
         gameViewModel.remainingMs.observe(viewLifecycleOwner) { ms ->
@@ -369,6 +367,7 @@ class GameFragment : Fragment(), SensorEventListener {
     }
 
     private fun activateTiltMode() {
+        if (tiltModeActive) return
         tiltModeActive = true
         for (i in 0 until gameField.childCount) {
             val v = gameField.getChildAt(i)
@@ -388,7 +387,7 @@ class GameFragment : Fragment(), SensorEventListener {
         screamPlayer?.start()
 
         viewLifecycleOwner.lifecycleScope.launch {
-            delay(12500L)
+            delay(9400L)
             tiltModeActive = false
             sensorManager?.unregisterListener(this@GameFragment)
             screamPlayer?.stop()
@@ -429,5 +428,8 @@ class GameFragment : Fragment(), SensorEventListener {
         bonusJob?.cancel()
         goldenBugJob?.cancel()
         sensorManager?.unregisterListener(this)
+        screamPlayer?.stop()
+        screamPlayer?.release()
+        screamPlayer = null
     }
 }
