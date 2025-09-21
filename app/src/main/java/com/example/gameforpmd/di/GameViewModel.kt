@@ -30,6 +30,16 @@ class GameViewModel : ViewModel() {
     private val _gameFinished = SingleLiveEvent<Unit>()
     val gameFinished: LiveData<Unit> get() = _gameFinished
 
+    private val _tiltModeEndTime = MutableLiveData<Long?>()
+    val tiltModeEndTime: LiveData<Long?> get() = _tiltModeEndTime
+
+    fun activateTilt(durationMs: Long) {
+        _tiltModeEndTime.value = System.currentTimeMillis() + durationMs
+    }
+
+    fun clearTilt() {
+        _tiltModeEndTime.value = null
+    }
 
 
 
