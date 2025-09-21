@@ -54,7 +54,8 @@ class GameFragment : Fragment(), SensorEventListener {
 
     private var isRunning = false
     private var isPaused = false
-
+    private var goldenBugJob: Job? = null
+    private var goldRate: Float = 0f
     private var timer: CountDownTimer? = null
     private var spawnerJob: Job? = null
     private var bonusJob: Job? = null
@@ -86,6 +87,12 @@ class GameFragment : Fragment(), SensorEventListener {
         val roundSec = p.getInt("roundDuration", 30).coerceAtLeast(10)
         roundMs = roundSec * 1000L
 
+        // 🔥 загружаем курс золота из SharedPreferences
+        val goldPrefs = requireContext().getSharedPreferences("gold_prefs", Context.MODE_PRIVATE)
+        val savedRate = goldPrefs.getString("gold_rate", null)
+        goldRate = savedRate?.replace(",", ".")?.toFloatOrNull() ?: 0f
+        Log.d("GameFragment", "Загружен курс золота: $goldRate ₽")
+
         updateScore(0)
         updateTimer(roundMs)
 
@@ -99,6 +106,51 @@ class GameFragment : Fragment(), SensorEventListener {
         btnStart.setOnClickListener { startGame() }
         btnPause.setOnClickListener { togglePause() }
         btnStop.setOnClickListener { stopGame() }
+    }
+
+    // -------------------- Золотой жук --------------------
+    private fun startGoldenBugSpawning() {
+        goldenBugJob?.cancel()
+        goldenBugJob = viewLifecycleOwner.lifecycleScope.launch {
+            while (isActive && isRunning) {
+                if (!isPaused) addGoldenBug()
+                delay(20_000L) // каждые 20 секунд
+            }
+        }
+    }
+
+    private fun addGoldenBug() {
+        val iv = ImageView(requireContext()).apply {
+            setImageResource(R.drawable.golden_bug)
+            tag = "golden_bug"
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener {
+                if (isRunning && !isPaused) {
+                    val points = goldRate.toInt().coerceAtLeast(1)
+                    updateScore(points)
+                    gameField.removeView(this)
+                    Toast.makeText(
+                        requireContext(),
+                        "Золотой жук! +$points очков",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        gameField.addView(iv)
+
+        gameField.post {
+            val w = gameField.width
+            val h = gameField.height
+            val margin = 100
+            iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
+            iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
+
+            moveBugRandom(iv)
+        }
     }
 
     // -------------------- Сохранение результата --------------------
@@ -174,6 +226,7 @@ class GameFragment : Fragment(), SensorEventListener {
         gameField.post {
             startSpawning()
             startBonusSpawning()
+            startGoldenBugSpawning()
         }
     }
 
@@ -199,6 +252,7 @@ class GameFragment : Fragment(), SensorEventListener {
         timer?.cancel()
         spawnerJob?.cancel()
         bonusJob?.cancel()
+        goldenBugJob?.cancel()
         clearField()
         updateTimer(roundMs)
         Toast.makeText(requireContext(), "Игра остановлена", Toast.LENGTH_SHORT).show()
@@ -231,7 +285,7 @@ class GameFragment : Fragment(), SensorEventListener {
             tag = "bug"
             setOnClickListener {
                 if (isRunning && !isPaused) {
-                    updateScore(+10)
+                    updateScore(+1000)
                     gameField.removeView(this)
                 }
             }
@@ -370,7 +424,7 @@ class GameFragment : Fragment(), SensorEventListener {
         // Music
         screamPlayer?.release()
         screamPlayer = MediaPlayer.create(requireContext(), R.raw.scream)
-        screamPlayer?.seekTo(31500) // перемотка на 2 секунды
+        screamPlayer?.seekTo(31500)
         screamPlayer?.start()
 
         // через 5 секунд выключаем tilt-режим
