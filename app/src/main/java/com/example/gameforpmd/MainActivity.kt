@@ -86,12 +86,21 @@ class MainActivity : AppCompatActivity() {
                     if (response.isSuccessful) {
                         val data = response.body()
                         val goldRate = data?.records?.firstOrNull { it.code == 1 }?.buy
-                        Log.d("API", "Курс золота: $goldRate ₽")
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Курс золота: $goldRate ₽",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        if (goldRate != null) {
+                            Log.d("API", "Курс золота: $goldRate ₽")
+
+                            // Сохраняем курс в SharedPreferences
+                            val prefs = getSharedPreferences("gold_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putString("gold_rate", goldRate).apply()
+
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Курс золота: $goldRate ₽",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            Log.e("API", "Золото не найдено в ответе")
+                        }
                     } else {
                         Log.e("API", "Ошибка ответа: ${response.code()}")
                     }
