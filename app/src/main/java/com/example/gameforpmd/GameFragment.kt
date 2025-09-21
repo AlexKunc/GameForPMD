@@ -98,7 +98,7 @@ class GameFragment : Fragment(), SensorEventListener {
 
         gameField.setOnTouchListener { _, event ->
             if (isRunning && !isPaused && event.action == MotionEvent.ACTION_DOWN) {
-                updateScore(-5)
+                updateScore(-500)
             }
             false
         }
@@ -292,20 +292,23 @@ class GameFragment : Fragment(), SensorEventListener {
         }
         gameField.addView(iv)
 
-        if (tiltModeActive) {
-            // если tilt включён → ставим жука на случайное место, без анимации
-            gameField.post {
-                val w = gameField.width
-                val h = gameField.height
-                val margin = 50
-                iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
-                iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
+        gameField.post {
+            val w = gameField.width
+            val h = gameField.height
+            val margin = 100
+
+            // 🎯 случайная стартовая позиция
+            iv.x = Random.nextInt(margin, max(1, w - margin)).toFloat()
+            iv.y = Random.nextInt(margin, max(1, h - margin)).toFloat()
+
+            if (tiltModeActive) {
+                // если tilt включён → просто остаётся на месте
+            } else {
+                moveBugRandom(iv) // теперь стартует с этой позиции
             }
-        } else {
-            // обычное движение по траектории
-            moveBugRandom(iv)
         }
     }
+
 
 
 
@@ -383,7 +386,6 @@ class GameFragment : Fragment(), SensorEventListener {
             )
             setOnClickListener {
                 if (isRunning && !isPaused) {
-                    updateScore(+50)
                     gameField.removeView(this)
                     activateTiltMode()
                 }
