@@ -30,6 +30,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 import android.animation.ObjectAnimator
 import android.animation.TimeInterpolator
+import android.media.MediaPlayer
 import android.view.animation.AccelerateDecelerateInterpolator
 
 class GameFragment : Fragment(), SensorEventListener {
@@ -37,6 +38,8 @@ class GameFragment : Fragment(), SensorEventListener {
     private lateinit var gameField: FrameLayout
     private lateinit var textTimer: TextView
     private lateinit var textScore: TextView
+
+    private var screamPlayer: MediaPlayer? = null
     private lateinit var btnStart: Button
     private lateinit var btnPause: Button
 
@@ -364,11 +367,21 @@ class GameFragment : Fragment(), SensorEventListener {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
 
+        // Music
+        screamPlayer?.release()
+        screamPlayer = MediaPlayer.create(requireContext(), R.raw.scream)
+        screamPlayer?.seekTo(31500) // перемотка на 2 секунды
+        screamPlayer?.start()
+
         // через 5 секунд выключаем tilt-режим
         viewLifecycleOwner.lifecycleScope.launch {
-            delay(5000L)
+            delay(12500L)
             tiltModeActive = false
             sensorManager?.unregisterListener(this@GameFragment)
+
+            screamPlayer?.stop()
+            screamPlayer?.release()
+            screamPlayer = null
 
             // оживляем всех жуков заново
             for (i in 0 until gameField.childCount) {
