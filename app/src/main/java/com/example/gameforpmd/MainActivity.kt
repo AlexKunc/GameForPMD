@@ -3,13 +3,21 @@ package com.example.gameforpmd
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.example.gameforpmd.data.remote.MetalRates
+import com.example.gameforpmd.data.remote.RetrofitClient
 import com.example.gameforpmd.ui.records.RecordsFragment
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -39,18 +47,16 @@ class MainActivity : AppCompatActivity() {
             tab.text = titles[position]
         }.attach()
 
-        // 👉 проверяем при старте, есть ли выбранный пользователь
+        // 👉 проверка текущего пользователя
         lifecycleScope.launch {
             val users = MyApp.db.userDao().getAll()
             if (users.isNotEmpty()) {
                 val prefs = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                 val currentId = prefs.getInt("current_user_id", -1)
                 if (currentId == -1) {
-                    // если никто не выбран — берём первого
                     saveCurrentUserId(users.first().id)
                     Log.d("MainActivity", "Выбран первый пользователь: ${users.first().name}")
                 } else {
-                    // если уже выбран, логируем
                     val selected = users.find { it.id == currentId }
                     Log.d("MainActivity", "Текущий пользователь: ${selected?.name ?: "не найден"}")
                 }
@@ -58,10 +64,42 @@ class MainActivity : AppCompatActivity() {
                 Log.d("MainActivity", "Нет зарегистрированных пользователей")
             }
         }
+
+        // 👉 проверка курса золота
+        checkGoldRate()
     }
 
     private fun saveCurrentUserId(id: Int) {
         val prefs = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("current_user_id", id).apply()
+    }
+
+    private fun checkGoldRate() {
+        // Берем сегодняшнюю и вчерашнюю даты
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val today = sdf.format(Date())
+        val yesterday = sdf.format(Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000))
+
+        RetrofitClient.api.getMetalRates(yesterday, today)
+            .enqueue(object : Callback<MetalRates> {
+                override fun onResponse(call: Call<MetalRates>, response: Response<MetalRates>) {
+                    if (response.isSuccessful) {
+                        val data = response.body()
+                        val goldRate = data?.records?.firstOrNull { it.code == 1 }?.buy
+                        Log.d("API", "Курс золота: $goldRate ₽")
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Курс золота: $goldRate ₽",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Log.e("API", "Ошибка ответа: ${response.code()}")
+                    }
+                }
+
+                override fun onFailure(call: Call<MetalRates>, t: Throwable) {
+                    Log.e("API", "Ошибка сети: ${t.message}")
+                }
+            })
     }
 }
