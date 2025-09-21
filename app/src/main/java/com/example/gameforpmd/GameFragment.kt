@@ -256,11 +256,10 @@ class GameFragment : Fragment(), SensorEventListener {
         gameField.post {
             val w = gameField.width
             val h = gameField.height
-            val start = randomEdgePoint(w, h)
-            val end = randomEdgePoint(w, h)
 
-            iv.x = start.x
-            iv.y = start.y
+            // Начало = текущая позиция жука
+            val start = PointF(iv.x, iv.y)
+            val end = randomEdgePoint(w, h)
 
             val distance = max(1f, dist(start, end))
             val baseSpeed = (11 - difficulty) * 300L
@@ -275,10 +274,6 @@ class GameFragment : Fragment(), SensorEventListener {
                 interpolator = smooth()
             }
 
-            // добавляем в список, чтобы потом остановить
-            bugAnimators.add(animX)
-            bugAnimators.add(animY)
-
             animX.start()
             animY.start()
 
@@ -288,6 +283,7 @@ class GameFragment : Fragment(), SensorEventListener {
             }
         }
     }
+
 
 
     private fun smooth(): TimeInterpolator = AccelerateDecelerateInterpolator()
@@ -373,6 +369,16 @@ class GameFragment : Fragment(), SensorEventListener {
             delay(5000L)
             tiltModeActive = false
             sensorManager?.unregisterListener(this@GameFragment)
+
+            // оживляем всех жуков заново
+            for (i in 0 until gameField.childCount) {
+                val v = gameField.getChildAt(i)
+                if (v is ImageView && v.tag == "bug") {
+                    moveBugRandom(v)
+                }
+            }
+
+            Toast.makeText(requireContext(), "Tilt-режим завершён", Toast.LENGTH_SHORT).show()
         }
 
         Toast.makeText(requireContext(), "Tilt-режим активирован!", Toast.LENGTH_SHORT).show()
